@@ -81,14 +81,12 @@ public class AuthController {
     }
 
     @GetMapping("/usuarios")
-    @PreAuthorize("hasAuthority('ADMIN')")
     @Operation(summary = "Listar usuarios paginados (ADMIN)")
     public ResponseEntity<Page<UsuarioDto>> listarUsuarios(@PageableDefault(size = 20) Pageable pageable) {
         return ResponseEntity.ok(usuarioService.listarUsuarios(pageable));
     }
 
     @PutMapping("/usuarios/{id}/rol")
-    @PreAuthorize("hasAuthority('ADMIN')")
     @Operation(summary = "Cambiar rol de un usuario (ADMIN)")
     public ResponseEntity<UsuarioDto> cambiarRol(@PathVariable UUID id, @RequestParam String rol) {
         return ResponseEntity.ok(usuarioService.cambiarRol(id, rol));
