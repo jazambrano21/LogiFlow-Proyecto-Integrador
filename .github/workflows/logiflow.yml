@@ -52,12 +52,13 @@ jobs:
         run: |
           mvn -B verify sonar:sonar \
             -Dsonar.projectKey=jazambrano21_LogiFlow-Main \
-            -Dsonar.organization=jazambrano21
+            -Dsonar.organization=jazambrano21 \
+            -Dsonar.host.url=https://sonarcloud.io
 
       - name: Notificar éxito en Telegram
         if: success()
         run: |
-          curl -X POST https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage \
+          curl -X POST https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage \
             -H "Content-Type: application/json" \
             -d '{
               "chat_id": "${{ secrets.TELEGRAM_CHAT_ID }}",
@@ -67,7 +68,7 @@ jobs:
       - name: Notificar fallo en Telegram
         if: failure()
         run: |
-          curl -X POST https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage \
+          curl -X POST https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage \
             -H "Content-Type: application/json" \
             -d '{
               "chat_id": "${{ secrets.TELEGRAM_CHAT_ID }}",
