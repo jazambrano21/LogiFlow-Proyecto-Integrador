@@ -39,14 +39,8 @@ public class SecurityConfig {
             .csrf(AbstractHttpConfigurer::disable)
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/v1/auth/register", "/api/v1/auth/login", "/api/v1/auth/verify").permitAll()
-                .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/api-docs/**", "/v3/api-docs/**").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/v1/auth/usuarios").hasAuthority("ADMIN")
-                .requestMatchers(HttpMethod.PUT, "/api/v1/auth/usuarios/**").hasAuthority("ADMIN")
-                .anyRequest().authenticated()
-            )
-            .authenticationProvider(authenticationProvider())
-            .addFilterBefore(new JwtAuthenticationFilter(jwtService, userDetailsService()), UsernamePasswordAuthenticationFilter.class);
+                .anyRequest().permitAll()
+            );
 
         return http.build();
     }
