@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  postgres-auth:
+    image: postgres:15-alpine
+    container_name: postgres-auth
+    environment:
+      POSTGRES_DB: db_auth
+      POSTGRES_USER: logiflow
+      POSTGRES_PASSWORD: logiflow123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_auth_data:/var/lib/postgresql/data
+    networks:
+      - logiflow-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U logiflow -d db_auth"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ms-autenticacion:
+    build: .
+    container_name: ms-autenticacion
+    ports:
+      - "8081:8081"
+    depends_on:
+      postgres-auth:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres-auth
+      DB_PORT: 5432
+      DB_NAME: db_auth
+      DB_USER: logiflow
+      DB_PASS: logiflow123
+      JWT_SECRET: logiflow-secret-key-2026
+      JWT_EXPIRATION_MS: 86400000
+    networks:
+      - logiflow-network
+
+volumes:
+  postgres_auth_data:
+
+networks:
+  logiflow-network:
+    external: true
