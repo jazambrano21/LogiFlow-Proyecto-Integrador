@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  mysql_ruteo:
+    image: mysql:8.0
+    container_name: mysql_ruteo
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: logiflow_ruteo
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_ruteo_data:/var/lib/mysql
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mysql_ruteo_data:
