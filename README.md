@@ -80,3 +80,5 @@ La configuración del pipeline incluye:
 
 Esta configuración permite verificar el código, ejecutar pruebas y controlar la calidad en cada cambio relevante del proyecto.
 
+
+*Prueba de CI: cambio menor.*
