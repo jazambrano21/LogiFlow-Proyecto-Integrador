@@ -1,6 +1,7 @@
 package com.logiflow.auth.config;
 
 import com.logiflow.auth.security.JwtAuthenticationFilter;
+import com.logiflow.auth.service.JwtService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -29,7 +30,7 @@ import com.logiflow.auth.repository.UsuarioRepository;
 @RequiredArgsConstructor
 public class SecurityConfig {
 
-    private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final JwtService jwtService;
     private final UsuarioRepository usuarioRepository;
 
     @Bean
@@ -45,7 +46,7 @@ public class SecurityConfig {
                 .anyRequest().authenticated()
             )
             .authenticationProvider(authenticationProvider())
-            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+            .addFilterBefore(new JwtAuthenticationFilter(jwtService, userDetailsService()), UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
