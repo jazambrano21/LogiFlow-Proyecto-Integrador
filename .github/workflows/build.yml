@@ -1,0 +1,67 @@
+name: CI Pipeline - LogiFlow
+
+on:
+  push:
+    branches: [ main, development ]
+  pull_request:
+    branches: [ main, development ]
+
+jobs:
+  build:
+    name: Build, Test & SonarCloud
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Cache SonarCloud packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: ${{ runner.os }}-sonar
+
+      - name: Cache Maven packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2
+
+      - name: Build, Test y análisis SonarCloud
+        id: sonar
+        working-directory: Backend/ms-autenticacion
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          mvn -B verify sonar:sonar \
+            -Dsonar.projectKey=jazambrano21_LogiFlow-Proyecto-Integrador \
+            -Dsonar.organization=jazambrano21 \
+            -Dsonar.login=${{ secrets.SONAR_TOKEN }} \
+            -Dsonar.host.url=https://sonarcloud.io
+
+      - name: Notificar Telegram — Éxito ✅
+        if: success()
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d parse_mode="Markdown" \
+            -d text="✅ *LogiFlow CI — ÉXITO*\n\n🌿 *Rama:* \\${{ github.ref_name }}\n👤 *Autor:* ${{ github.actor }}\n💬 *Commit:* ${{ github.event.head_commit.message || github.event.pull_request.title || github.sha }}\n\n🔗 [Ver SonarCloud](https://sonarcloud.io/project/overview?id=jazambrano21_LogiFlow-Proyecto-Integrador)\n🔗 [Ver Pipeline](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+
+      - name: Notificar Telegram — Fallo ❌
+        if: failure()
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d parse_mode="Markdown" \
+            -d text="❌ *LogiFlow CI — FALLÓ*\n\n🌿 *Rama:* \\${{ github.ref_name }}\n👤 *Autor:* ${{ github.actor }}\n💬 *Commit:* ${{ github.event.head_commit.message || github.event.pull_request.title || github.sha }}\n\n🔗 [Ver Pipeline](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
