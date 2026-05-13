@@ -47,8 +47,8 @@ jobs:
           mvn -B verify sonar:sonar \
             -Dsonar.projectKey=jazambrano21_LogiFlow-Proyecto-Integrador \
             -Dsonar.organization=jazambrano21 \
-            -Dsonar.login=${{ secrets.SONAR_TOKEN }} \
-            -Dsonar.host.url=https://sonarcloud.io
+            -Dsonar.host.url=https://sonarcloud.io \
+            -Dsonar.login="$SONAR_TOKEN"
 
       - name: Notificar Telegram — Éxito ✅
         if: success()
