@@ -1,5 +1,5 @@
 ﻿# LogiFlow - Proyecto Integrador
-#ENDPOINTS Y EJECUCION
+##ENDPOINTS Y EJECUCION
 
 ## Configuración del pipeline
 
