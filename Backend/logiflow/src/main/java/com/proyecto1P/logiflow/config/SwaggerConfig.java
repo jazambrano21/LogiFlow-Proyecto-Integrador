@@ -9,7 +9,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 
-// prueba para github 
+// prueba para github
 @Configuration
 public class SwaggerConfig {
 

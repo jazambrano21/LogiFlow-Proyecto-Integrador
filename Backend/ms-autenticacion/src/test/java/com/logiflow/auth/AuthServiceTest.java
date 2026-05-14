@@ -14,10 +14,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.Optional;
@@ -38,12 +35,6 @@ class AuthServiceTest {
 
     @Mock
     private JwtService jwtService;
-
-    @Mock
-    private AuthenticationManager authenticationManager;
-
-    @Mock
-    private Authentication authentication;
 
     @InjectMocks
     private AuthService authService;
@@ -69,8 +60,8 @@ class AuthServiceTest {
                 .password("password")
                 .build();
 
-        when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class))).thenReturn(authentication);
         when(usuarioRepository.findByEmail("test@logiflow.com")).thenReturn(Optional.of(usuario));
+        when(passwordEncoder.matches("password", "encodedPass")).thenReturn(true);
         when(jwtService.generateToken(any(), any(), any())).thenReturn("jwt-token");
         when(jwtService.getExpirationMs()).thenReturn(86400000L);
 
@@ -88,8 +79,8 @@ class AuthServiceTest {
                 .password("wrongpassword")
                 .build();
 
-        when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
-                .thenThrow(new BadCredentialsException("Credenciales inválidas"));
+        when(usuarioRepository.findByEmail("test@logiflow.com")).thenReturn(Optional.of(usuario));
+        when(passwordEncoder.matches("wrongpassword", "encodedPass")).thenReturn(false);
 
         assertThrows(BadCredentialsException.class, () -> authService.login(request));
     }
