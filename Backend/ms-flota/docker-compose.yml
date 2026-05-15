@@ -1,39 +1,44 @@
-version: "3.8"
-
 services:
-  db:
-    image: postgres:15
-    container_name: ms_flota_db
+  mysql-flota:
+    image: mysql:8.0
+    container_name: mysql_flota
+    restart: always
     environment:
-      POSTGRES_DB: ms_flota_db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: 12345678
-    volumes:
-      - ms_flota_db_data:/var/lib/postgresql/data
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: ms_flota_db
     ports:
-      - "5432:5432"
+      - "3307:3306"
+    volumes:
+      - mysql_flota_data:/var/lib/mysql
+    networks:
+      - flota-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d ms_flota_db"]
-      interval: 5s
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -proot"]
+      interval: 10s
       timeout: 5s
-      retries: 10
+      retries: 5
 
-  app:
-    image: ms-flota:latest
+  ms-flota:
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: ms-flota
-    build: .
-    depends_on:
-      db:
-        condition: service_healthy
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/ms_flota_db
-      SPRING_DATASOURCE_USERNAME: postgres
-      SPRING_DATASOURCE_PASSWORD: 12345678
-      SPRING_JPA_HIBERNATE_DDL_AUTO: create-drop
-      SPRING_JPA_SHOW_SQL: "true"
+    restart: always
     ports:
       - "8080:8080"
-    restart: on-failure
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql-flota:3306/ms_flota_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+    depends_on:
+      mysql-flota:
+        condition: service_healthy
+    networks:
+      - flota-network
 
 volumes:
-  ms_flota_db_data:
+  mysql_flota_data:
+
+networks:
+  flota-network:
+    driver: bridge

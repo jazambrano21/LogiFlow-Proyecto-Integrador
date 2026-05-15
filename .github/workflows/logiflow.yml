@@ -30,7 +30,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [ms-flota, ms-taller]
+        include:
+          # ✅ ms-flota → MySQL puerto 3307
+          - service: ms-flota
+            db_service: mysql-flota
+            db_port: 3307
+            db_name: ms_flota_db
+            datasource_url: jdbc:mysql://localhost:3307/ms_flota_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+
+          # ✅ ms-taller → MySQL puerto 3309
+          - service: ms-taller
+            db_service: mysql-taller
+            db_port: 3309
+            db_name: logiflow_taller
+            datasource_url: jdbc:mysql://localhost:3309/logiflow_taller?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+
     steps:
       - name: Checkout código
         uses: actions/checkout@v4
@@ -43,21 +57,48 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
           cache: 'maven'
+
+      # ✅ Solo levanta la BD, no la app
+      - name: Levantar base de datos MySQL
+        working-directory: Backend/${{ matrix.service }}
+        run: docker compose up -d ${{ matrix.db_service }}
+
+      # ✅ Espera que MySQL esté healthy
+      - name: Esperar que MySQL esté listo
+        working-directory: Backend/${{ matrix.service }}
+        run: |
+          echo "Esperando MySQL en puerto ${{ matrix.db_port }}..."
+          for i in {1..30}; do
+            docker compose ps ${{ matrix.db_service }} | grep "healthy" && echo "✅ MySQL listo" && break
+            echo "Intento $i/30..."
+            sleep 5
+          done
 
       - name: Dar permisos a Maven Wrapper
         working-directory: Backend/${{ matrix.service }}
         run: chmod +x mvnw
 
+      # ✅ Tests apuntando a la BD dockerizada
       - name: Compilar y ejecutar pruebas
         working-directory: Backend/${{ matrix.service }}
         run: ./mvnw -B clean verify
+        env:
+          SPRING_DATASOURCE_URL: ${{ matrix.datasource_url }}
+          SPRING_DATASOURCE_USERNAME: root
+          SPRING_DATASOURCE_PASSWORD: root
+          SPRING_JPA_HIBERNATE_DDL_AUTO: create-drop
+          SPRING_DATASOURCE_DRIVER_CLASS_NAME: com.mysql.cj.jdbc.Driver
+
+      - name: Bajar containers
+        if: always()
+        working-directory: Backend/${{ matrix.service }}
+        run: docker compose down -v
 
   sonar:
     name: Analisis Sonar
     runs-on: ubuntu-latest
     needs: build_test
-    outputs:
-      summary: ${{ steps.metrics.outputs.summary }}
+
     steps:
       - name: Checkout código
         uses: actions/checkout@v4
@@ -71,110 +112,72 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
-      - name: Dar permisos a Maven Wrapper de ms-flota
+      # ✅ Levantar ambas BDs MySQL
+      - name: Levantar BD ms-flota
         working-directory: Backend/ms-flota
-        run: chmod +x mvnw
+        run: docker compose up -d mysql-flota
 
-      - name: Dar permisos a Maven Wrapper de ms-taller
+      - name: Levantar BD ms-taller
         working-directory: Backend/ms-taller
-        run: chmod +x mvnw
+        run: docker compose up -d mysql-taller
 
-      - name: Generar binarios y reportes para Sonar
+      - name: Esperar BDs MySQL
+        run: |
+          echo "Esperando ambas BDs..."
+          sleep 30
+
+      - name: Dar permisos Maven Wrapper
+        run: |
+          chmod +x Backend/ms-flota/mvnw
+          chmod +x Backend/ms-taller/mvnw
+
+      # ✅ Generar binarios con ambas BDs disponibles
+      - name: Generar binarios para Sonar
         run: |
           cd Backend/ms-flota
-          ./mvnw -B clean verify
-          cd ../ms-taller
-          ./mvnw -B clean verify
-        shell: bash
+          ./mvnw -B clean verify \
+            -Dspring.datasource.url="jdbc:mysql://localhost:3307/ms_flota_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true" \
+            -Dspring.datasource.username=root \
+            -Dspring.datasource.password=root \
+            -Dspring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver \
+            -Dspring.jpa.hibernate.ddl-auto=create-drop
 
-      - name: Analizar proyecto en Sonar
-        uses: SonarSource/sonarqube-scan-action@v5
+          cd ../ms-taller
+          ./mvnw -B clean verify \
+            -Dspring.datasource.url="jdbc:mysql://localhost:3309/logiflow_taller?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true" \
+            -Dspring.datasource.username=root \
+            -Dspring.datasource.password=root \
+            -Dspring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver \
+            -Dspring.jpa.hibernate.ddl-auto=create-drop
+
+      - name: Analizar en SonarCloud
+        uses: SonarSource/sonarqube-scan-action@v6
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: https://sonarcloud.io
 
-      - name: Obtener resumen de Sonar
-        id: metrics
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      - name: Bajar containers
+        if: always()
         run: |
-          response=$(curl -s -u "${SONAR_TOKEN}:" "https://sonarcloud.io/api/measures/component?component=jazambrano21_LogiFlow-Proyecto-Integrador&metricKeys=alert_status,bugs,vulnerabilities,code_smells,coverage" || true)
-          export SONAR_RESPONSE="$response"
-          summary=$(python - <<'PY'
-          import json, os
-          raw = os.environ.get("SONAR_RESPONSE", "").strip()
-          if not raw:
-              print("Sonar | quality=N/D | bugs=N/D | vulns=N/D | smells=N/D | coverage=N/D")
-          else:
-              try:
-                  data = json.loads(raw)
-                  measures = {m["metric"]: m["value"] for m in data.get("component", {}).get("measures", [])}
-                  print(
-                      "Sonar | quality={quality} | bugs={bugs} | vulns={vulns} | smells={smells} | coverage={coverage}".format(
-                          quality=measures.get("alert_status", "N/D"),
-                          bugs=measures.get("bugs", "N/D"),
-                          vulns=measures.get("vulnerabilities", "N/D"),
-                          smells=measures.get("code_smells", "N/D"),
-                          coverage=(measures.get("coverage", "N/D") + "%") if measures.get("coverage") else "N/D",
-                      )
-                  )
-              except Exception:
-                  print("Sonar | quality=N/D | bugs=N/D | vulns=N/D | smells=N/D | coverage=N/D")
-          PY
-          )
-          echo "summary=${summary}" >> "$GITHUB_OUTPUT"
-        shell: bash
+          docker compose -f Backend/ms-flota/docker-compose.yml down -v
+          docker compose -f Backend/ms-taller/docker-compose.yml down -v
 
-  notify:
-    name: Notificar a Telegram
-    runs-on: ubuntu-latest
-    needs: [build_test, sonar]
-    if: always()
-    steps:
-      - name: Construir mensaje
-        id: message
+      - name: Notificar éxito en Telegram
+        if: success()
         run: |
-          if [ "${{ needs.build_test.result }}" = "success" ] && [ "${{ needs.sonar.result }}" = "success" ]; then
-            status="✅ CI exitoso"
-          else
-            status="❌ CI con fallos"
-          fi
-          sonar_summary="${{ needs.sonar.outputs.summary }}"
-          if [ -z "$sonar_summary" ]; then
-            sonar_summary="Sonar | quality=N/D | bugs=N/D | vulns=N/D | smells=N/D | coverage=N/D"
-          fi
-          {
-            echo "text<<EOF"
-            echo "${status}"
-            echo ""
-            echo "Proyecto: LogiFlow Fase 1"
-            echo "Rama: ${{ github.ref_name }}"
-            echo "Evento: ${{ github.event_name }}"
-            echo "Build/Test: ${{ needs.build_test.result }}"
-            echo "Sonar: ${{ needs.sonar.result }}"
-            echo "${sonar_summary}"
-            echo "Pipeline: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-            echo "Commit: ${{ github.sha }}"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-        shell: bash
-
-      - name: Enviar Telegram
-        continue-on-error: true
-        run: |
-          payload=$(python - <<'PY'
-          import json, os
-          print(json.dumps({
-              "chat_id": os.environ["TELEGRAM_CHAT_ID"],
-              "text": os.environ["MESSAGE"]
-          }))
-          PY
-          )
-          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+          curl -X POST https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage \
             -H "Content-Type: application/json" \
-            -d "$payload"
-        shell: bash
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          MESSAGE: ${{ steps.message.outputs.text }}
+            -d '{
+              "chat_id": "${{ secrets.TELEGRAM_CHAT_ID }}",
+              "text": "✅ LogiFlow CI Exitoso\n\n📊 SonarCloud: https://sonarcloud.io/project/overview?id=jazambrano21_LogiFlow-Main\n🔗 Pipeline: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            }'
+
+      - name: Notificar fallo en Telegram
+        if: failure()
+        run: |
+          curl -X POST https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage \
+            -H "Content-Type: application/json" \
+            -d '{
+              "chat_id": "${{ secrets.TELEGRAM_CHAT_ID }}",
+              "text": "❌ LogiFlow CI Falló\n\n🔗 Pipeline: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            }'

@@ -35,6 +35,7 @@ public class Vehiculo {
      * Relación MANY-TO-ONE:
      * - muchos vehículos -> un conductor
      * - nullable=true permite que el vehículo esté sin asignación
+     * Probando
      */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "conductor_id", nullable = true)
