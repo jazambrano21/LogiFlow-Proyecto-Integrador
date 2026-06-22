@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ms-clientes
+  namespace: logiflow
+  labels:
+    app: ms-clientes
+spec:
+  selector:
+    app: ms-clientes
+  ports:
+    - name: http
+      port: 8082
+      targetPort: 8082
+  type: ClusterIP

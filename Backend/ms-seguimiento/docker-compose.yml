@@ -1,0 +1,21 @@
+version: "3.9"
+
+# docker-compose individual para ms-seguimiento en desarrollo local
+# Requiere RabbitMQ corriendo en localhost:5672
+# Levantar RabbitMQ desde la raíz: docker-compose up -d rabbitmq
+
+services:
+  ms-seguimiento:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ms-seguimiento
+    ports:
+      - "3005:3005"
+    environment:
+      WS_PORT: 3005
+      RABBITMQ_URL: amqp://logiflow:logiflow2026@host.docker.internal:5672
+      RABBITMQ_QUEUE: q.seguimiento.posicion
+      RABBITMQ_EXCHANGE: logistica.topic
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

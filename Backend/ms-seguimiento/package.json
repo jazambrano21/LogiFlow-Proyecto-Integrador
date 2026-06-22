@@ -1,0 +1,22 @@
+{
+  "name": "ms-seguimiento",
+  "version": "1.0.0",
+  "description": "Microservicio de seguimiento en tiempo real — WebSocket + RabbitMQ — LogiFlow Fase 2",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "simulate": "node src/simulator.js"
+  },
+  "dependencies": {
+    "amqplib": "0.10.4",
+    "dotenv": "16.4.5",
+    "socket.io": "4.7.5"
+  },
+  "devDependencies": {
+    "nodemon": "3.1.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rabbitmq-config
+  namespace: logiflow
+data:
+  rabbitmq.conf: |
+    load_definitions = /etc/rabbitmq/definitions.json
+    management.load_definitions = /etc/rabbitmq/definitions.json
+  definitions.json: |
+    {
+      "vhosts": [{ "name": "/" }],
+      "exchanges": [
+        {
+          "name": "logistica.topic",
+          "vhost": "/",
+          "type": "topic",
+          "durable": true,
+          "auto_delete": false,
+          "arguments": {}
+        }
+      ],
+      "queues": [
+        { "name": "q.ruteo.pedido-creado",         "vhost": "/", "durable": true, "auto_delete": false, "arguments": {} },
+        { "name": "q.seguimiento.posicion",         "vhost": "/", "durable": true, "auto_delete": false, "arguments": {} },
+        { "name": "q.notificaciones.eventos",       "vhost": "/", "durable": true, "auto_delete": false, "arguments": {} },
+        { "name": "q.facturacion.pedido-entregado", "vhost": "/", "durable": true, "auto_delete": false, "arguments": {} }
+      ],
+      "bindings": [
+        { "source": "logistica.topic", "vhost": "/", "destination": "q.ruteo.pedido-creado",         "destination_type": "queue", "routing_key": "pedido.creado",    "arguments": {} },
+        { "source": "logistica.topic", "vhost": "/", "destination": "q.seguimiento.posicion",         "destination_type": "queue", "routing_key": "posicion.actualizada", "arguments": {} },
+        { "source": "logistica.topic", "vhost": "/", "destination": "q.notificaciones.eventos",       "destination_type": "queue", "routing_key": "pedido.*",         "arguments": {} },
+        { "source": "logistica.topic", "vhost": "/", "destination": "q.facturacion.pedido-entregado", "destination_type": "queue", "routing_key": "pedido.entregado", "arguments": {} }
+      ]
+    }

@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ms-auth
+  namespace: logiflow
+  labels:
+    app: ms-auth
+spec:
+  selector:
+    app: ms-auth
+  ports:
+    - name: http
+      port: 8081
+      targetPort: 8081
+  type: ClusterIP
