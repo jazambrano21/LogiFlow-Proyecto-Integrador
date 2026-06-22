@@ -15,6 +15,9 @@ import java.util.List;
 /**
  * Cliente REST para consumir ms-flota-rest.
  * Endpoint consumido: GET /api/vehiculos/disponibles?capacidadMinima=X
+ *
+ * RestTemplate se inyecta via constructor para permitir mockeo en tests
+ * con @MockBean sin necesitar conexión real a ms-flota.
  */
 @Component
 @Slf4j
@@ -25,15 +28,19 @@ public class FlotaClient {
     @Value("${ms-flota.base-url}")
     private String flotaBaseUrl;
 
-    public FlotaClient() {
-        this.restTemplate = new RestTemplate();
+    /**
+     * Constructor para inyección de dependencias.
+     * En producción Spring inyecta el bean RestTemplate del contexto.
+     * En tests, @MockBean sustituye este bean automáticamente.
+     */
+    public FlotaClient(RestTemplate restTemplate) {
+        this.restTemplate = restTemplate;
     }
 
     /**
      * Obtiene la lista de vehículos disponibles de ms-flota.
-     * Filtra por capacidad mínima cuando se especifica.
      *
-     * @param capacidadMinima peso del paquete en kg (opcional)
+     * @param capacidadMinima peso mínimo en kg (opcional)
      * @return lista de vehículos disponibles, vacía si falla la llamada
      */
     public List<VehiculoDisponibleDTO> obtenerVehiculosDisponibles(Double capacidadMinima) {
