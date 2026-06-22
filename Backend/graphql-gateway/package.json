@@ -1,0 +1,30 @@
+{
+  "name": "graphql-gateway",
+  "version": "1.0.0",
+  "description": "GraphQL Gateway BFF — punto de entrada único para LogiFlow Fase 2",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js"
+  },
+  "dependencies": {
+    "@apollo/server": "4.10.4",
+    "@graphql-tools/schema": "10.0.3",
+    "graphql": "16.8.1",
+    "graphql-ws": "5.16.0",
+    "graphql-subscriptions": "2.0.0",
+    "ws": "8.17.1",
+    "socket.io-client": "4.7.5",
+    "axios": "1.7.2",
+    "dotenv": "16.4.5",
+    "express": "4.19.2",
+    "cors": "2.8.5",
+    "body-parser": "1.20.2"
+  },
+  "devDependencies": {
+    "nodemon": "3.1.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

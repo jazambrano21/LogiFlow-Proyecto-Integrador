@@ -1,0 +1,227 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# LogiFlow — Fase 2 (Etapa 1 + 2) — docker-compose raíz
+# Levanta todos los microservicios + infraestructura
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── Infraestructura ────────────────────────────────────────────────────────
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: logiflow-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: logiflow
+      RABBITMQ_DEFAULT_PASS: logiflow2026
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  mysql-auth:
+    image: mysql:8.0
+    container_name: mysql-auth
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: ms_auth_db
+    ports:
+      - "3310:3306"
+    volumes:
+      - mysql_auth_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  mysql-clientes:
+    image: mysql:8.0
+    container_name: mysql-clientes
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: ms_clientes_db
+    ports:
+      - "3311:3306"
+    volumes:
+      - mysql_clientes_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  mysql-pedidos:
+    image: mysql:8.0
+    container_name: mysql-pedidos
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: ms_pedidos_db
+    ports:
+      - "3312:3306"
+    volumes:
+      - mysql_pedidos_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  mysql-ruteo:
+    image: mysql:8.0
+    container_name: mysql-ruteo
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: ms_ruteo_db
+    ports:
+      - "3313:3306"
+    volumes:
+      - mysql_ruteo_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ── Microservicios ─────────────────────────────────────────────────────────
+
+  ms-auth:
+    build:
+      context: ./Backend/ms-auth
+      dockerfile: Dockerfile
+    container_name: ms-auth
+    ports:
+      - "8081:8081"
+    environment:
+      PORT: 8081
+      DB_URL: jdbc:mysql://mysql-auth:3306/ms_auth_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+      DB_USERNAME: root
+      DB_PASSWORD: root
+      JWT_SECRET: ${JWT_SECRET:-logiflow-secret-key-fase2-must-be-at-least-32-chars}
+      JWT_EXPIRATION: 86400000
+    depends_on:
+      mysql-auth:
+        condition: service_healthy
+
+  ms-clientes:
+    build:
+      context: ./Backend/ms-clientes
+      dockerfile: Dockerfile
+    container_name: ms-clientes
+    ports:
+      - "8082:8082"
+    environment:
+      PORT: 8082
+      DB_URL: jdbc:mysql://mysql-clientes:3306/ms_clientes_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+      DB_USERNAME: root
+      DB_PASSWORD: root
+      JWT_SECRET: ${JWT_SECRET:-logiflow-secret-key-fase2-must-be-at-least-32-chars}
+      MS_AUTH_URL: http://ms-auth:8081
+    depends_on:
+      mysql-clientes:
+        condition: service_healthy
+      ms-auth:
+        condition: service_started
+
+  ms-pedidos:
+    build:
+      context: ./Backend/ms-pedidos
+      dockerfile: Dockerfile
+    container_name: ms-pedidos
+    ports:
+      - "8083:8083"
+    environment:
+      PORT: 8083
+      DB_URL: jdbc:mysql://mysql-pedidos:3306/ms_pedidos_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+      DB_USERNAME: root
+      DB_PASSWORD: root
+      JWT_SECRET: ${JWT_SECRET:-logiflow-secret-key-fase2-must-be-at-least-32-chars}
+      RABBITMQ_HOST: logiflow-rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: logiflow
+      RABBITMQ_PASSWORD: logiflow2026
+    depends_on:
+      mysql-pedidos:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      ms-auth:
+        condition: service_started
+
+  ms-ruteo:
+    build:
+      context: ./Backend/ms-ruteo
+      dockerfile: Dockerfile
+    container_name: ms-ruteo
+    ports:
+      - "8085:8085"
+    environment:
+      PORT: 8085
+      DB_URL: jdbc:mysql://mysql-ruteo:3306/ms_ruteo_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+      DB_USERNAME: root
+      DB_PASSWORD: root
+      JWT_SECRET: ${JWT_SECRET:-logiflow-secret-key-fase2-must-be-at-least-32-chars}
+      RABBITMQ_HOST: logiflow-rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: logiflow
+      RABBITMQ_PASSWORD: logiflow2026
+      MS_FLOTA_URL: http://ms-flota:8080
+    depends_on:
+      mysql-ruteo:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  ms-seguimiento:
+    build:
+      context: ./Backend/ms-seguimiento
+      dockerfile: Dockerfile
+    container_name: ms-seguimiento
+    ports:
+      - "3005:3005"
+    environment:
+      WS_PORT: 3005
+      RABBITMQ_URL: amqp://logiflow:logiflow2026@logiflow-rabbitmq:5672
+      RABBITMQ_QUEUE: q.seguimiento.posicion
+      RABBITMQ_EXCHANGE: logistica.topic
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  graphql-gateway:
+    build:
+      context: ./Backend/graphql-gateway
+      dockerfile: Dockerfile
+    container_name: graphql-gateway
+    ports:
+      - "4000:4000"
+    environment:
+      PORT: 4000
+      MS_AUTH_URL: http://ms-auth:8081
+      MS_CLIENTES_URL: http://ms-clientes:8082
+      MS_PEDIDOS_URL: http://ms-pedidos:8083
+      MS_FLOTA_URL: http://ms-flota:8080
+      MS_RUTEO_URL: http://ms-ruteo:8085
+      MS_SEGUIMIENTO_WS_URL: http://ms-seguimiento:3005
+    depends_on:
+      - ms-auth
+      - ms-clientes
+      - ms-pedidos
+      - ms-ruteo
+      - ms-seguimiento
+
+volumes:
+  rabbitmq_data:
+  mysql_auth_data:
+  mysql_clientes_data:
+  mysql_pedidos_data:
+  mysql_ruteo_data:

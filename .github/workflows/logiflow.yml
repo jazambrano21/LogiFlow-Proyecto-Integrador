@@ -1,4 +1,4 @@
-name: CI Pipeline - Fase 1
+name: CI Pipeline - LogiFlow Fase 2
 
 on:
   push:
@@ -6,8 +6,16 @@ on:
     paths:
       - 'Backend/ms-flota/**'
       - 'Backend/ms-taller/**'
+      - 'Backend/ms-auth/**'
+      - 'Backend/ms-clientes/**'
+      - 'Backend/ms-pedidos/**'
+      - 'Backend/ms-ruteo/**'
+      - 'Backend/ms-seguimiento/**'
+      - 'Backend/graphql-gateway/**'
       - '.github/workflows/logiflow.yml'
       - 'sonar-project.properties'
+      - 'docker-compose.yml'
+      - 'rabbitmq/**'
       - 'README.md'
       - 'docs/**'
   pull_request:
@@ -15,35 +23,77 @@ on:
     paths:
       - 'Backend/ms-flota/**'
       - 'Backend/ms-taller/**'
+      - 'Backend/ms-auth/**'
+      - 'Backend/ms-clientes/**'
+      - 'Backend/ms-pedidos/**'
+      - 'Backend/ms-ruteo/**'
+      - 'Backend/ms-seguimiento/**'
+      - 'Backend/graphql-gateway/**'
       - '.github/workflows/logiflow.yml'
       - 'sonar-project.properties'
-      - 'README.md'
-      - 'docs/**'
+      - 'docker-compose.yml'
+      - 'rabbitmq/**'
 
 permissions:
   contents: read
 
 jobs:
-  build_test:
-    name: Build y test
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # JOB 1 — Build + test de microservicios Java (matrix)
+  # Fase 1: ms-flota, ms-taller
+  # Fase 2: ms-auth, ms-clientes, ms-pedidos, ms-ruteo
+  # ══════════════════════════════════════════════════════════════════════════
+  build_test_java:
+    name: Build y test Java — ${{ matrix.service }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         include:
-          # ✅ ms-flota → MySQL puerto 3307
+          # ── Fase 1 ──────────────────────────────────────────────────────
           - service: ms-flota
             db_service: mysql-flota
             db_port: 3307
             db_name: ms_flota_db
             datasource_url: jdbc:mysql://localhost:3307/ms_flota_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+            spring_profile: ""
 
-          # ✅ ms-taller → MySQL puerto 3309
           - service: ms-taller
             db_service: mysql-taller
             db_port: 3309
             db_name: logiflow_taller
             datasource_url: jdbc:mysql://localhost:3309/logiflow_taller?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+            spring_profile: ""
+
+          # ── Fase 2 — usan perfil "test" con H2 ──────────────────────────
+          - service: ms-auth
+            db_service: ""
+            db_port: 0
+            db_name: ""
+            datasource_url: ""
+            spring_profile: "test"
+
+          - service: ms-clientes
+            db_service: ""
+            db_port: 0
+            db_name: ""
+            datasource_url: ""
+            spring_profile: "test"
+
+          - service: ms-pedidos
+            db_service: ""
+            db_port: 0
+            db_name: ""
+            datasource_url: ""
+            spring_profile: "test"
+
+          - service: ms-ruteo
+            db_service: ""
+            db_port: 0
+            db_name: ""
+            datasource_url: ""
+            spring_profile: "test"
 
     steps:
       - name: Checkout código
@@ -58,18 +108,19 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
-      # ✅ Solo levanta la BD, no la app
+      # Solo para servicios Fase 1 que usan MySQL real
       - name: Levantar base de datos MySQL
+        if: ${{ matrix.db_service != '' }}
         working-directory: Backend/${{ matrix.service }}
         run: docker compose up -d ${{ matrix.db_service }}
 
-      # ✅ Espera que MySQL esté healthy
       - name: Esperar que MySQL esté listo
+        if: ${{ matrix.db_service != '' }}
         working-directory: Backend/${{ matrix.service }}
         run: |
           echo "Esperando MySQL en puerto ${{ matrix.db_port }}..."
           for i in {1..30}; do
-            docker compose ps ${{ matrix.db_service }} | grep "healthy" && echo "✅ MySQL listo" && break
+            docker compose ps ${{ matrix.db_service }} | grep "healthy" && echo "MySQL listo" && break
             echo "Intento $i/30..."
             sleep 5
           done
@@ -78,8 +129,9 @@ jobs:
         working-directory: Backend/${{ matrix.service }}
         run: chmod +x mvnw
 
-      # ✅ Tests apuntando a la BD dockerizada
-      - name: Compilar y ejecutar pruebas
+      # Servicios Fase 1 — MySQL real
+      - name: Compilar y testear (MySQL)
+        if: ${{ matrix.db_service != '' }}
         working-directory: Backend/${{ matrix.service }}
         run: ./mvnw -B clean verify
         env:
@@ -89,15 +141,61 @@ jobs:
           SPRING_JPA_HIBERNATE_DDL_AUTO: create-drop
           SPRING_DATASOURCE_DRIVER_CLASS_NAME: com.mysql.cj.jdbc.Driver
 
+      # Servicios Fase 2 — H2 en memoria (perfil test)
+      - name: Compilar y testear (H2 - perfil test)
+        if: ${{ matrix.db_service == '' }}
+        working-directory: Backend/${{ matrix.service }}
+        run: ./mvnw -B clean verify -Dspring.profiles.active=test
+        env:
+          JWT_SECRET: test-secret-key-for-ci-pipeline-32chars
+
       - name: Bajar containers
-        if: always()
+        if: ${{ always() && matrix.db_service != '' }}
         working-directory: Backend/${{ matrix.service }}
         run: docker compose down -v
 
-  sonar:
-    name: Analisis Sonar
+  # ══════════════════════════════════════════════════════════════════════════
+  # JOB 2 — Build + test de microservicios Node.js
+  # ms-seguimiento, graphql-gateway
+  # ══════════════════════════════════════════════════════════════════════════
+  build_test_node:
+    name: Build y test Node — ${{ matrix.service }}
     runs-on: ubuntu-latest
-    needs: build_test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: ms-seguimiento
+          - service: graphql-gateway
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: Backend/${{ matrix.service }}/package-lock.json
+
+      - name: Instalar dependencias
+        working-directory: Backend/${{ matrix.service }}
+        run: npm ci --omit=dev
+
+      - name: Verificar sintaxis JS
+        working-directory: Backend/${{ matrix.service }}
+        run: |
+          find src -name "*.js" -exec node --check {} \;
+          echo "Sintaxis verificada correctamente"
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # JOB 3 — Análisis SonarCloud (depende de ambos jobs de build)
+  # ══════════════════════════════════════════════════════════════════════════
+  sonar:
+    name: Análisis SonarCloud
+    runs-on: ubuntu-latest
+    needs: [build_test_java, build_test_node]
 
     steps:
       - name: Checkout código
@@ -112,7 +210,7 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
-      # ✅ Levantar ambas BDs MySQL
+      # ── Levantar BDs para Fase 1 ──────────────────────────────────────────
       - name: Levantar BD ms-flota
         working-directory: Backend/ms-flota
         run: docker compose up -d mysql-flota
@@ -121,20 +219,22 @@ jobs:
         working-directory: Backend/ms-taller
         run: docker compose up -d mysql-taller
 
-      - name: Esperar BDs MySQL
-        run: |
-          echo "Esperando ambas BDs..."
-          sleep 30
+      - name: Esperar BDs Fase 1
+        run: sleep 30
 
       - name: Dar permisos Maven Wrapper
         run: |
           chmod +x Backend/ms-flota/mvnw
           chmod +x Backend/ms-taller/mvnw
+          chmod +x Backend/ms-auth/mvnw
+          chmod +x Backend/ms-clientes/mvnw
+          chmod +x Backend/ms-pedidos/mvnw
+          chmod +x Backend/ms-ruteo/mvnw
 
-      # ✅ Generar binarios con ambas BDs disponibles
-      - name: Generar binarios para Sonar
+      # ── Generar binarios Fase 1 (MySQL) ───────────────────────────────────
+      - name: Generar binarios ms-flota
+        working-directory: Backend/ms-flota
         run: |
-          cd Backend/ms-flota
           ./mvnw -B clean verify \
             -Dspring.datasource.url="jdbc:mysql://localhost:3307/ms_flota_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true" \
             -Dspring.datasource.username=root \
@@ -142,7 +242,9 @@ jobs:
             -Dspring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver \
             -Dspring.jpa.hibernate.ddl-auto=create-drop
 
-          cd ../ms-taller
+      - name: Generar binarios ms-taller
+        working-directory: Backend/ms-taller
+        run: |
           ./mvnw -B clean verify \
             -Dspring.datasource.url="jdbc:mysql://localhost:3309/logiflow_taller?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true" \
             -Dspring.datasource.username=root \
@@ -150,6 +252,32 @@ jobs:
             -Dspring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver \
             -Dspring.jpa.hibernate.ddl-auto=create-drop
 
+      # ── Generar binarios Fase 2 (H2 en perfil test) ───────────────────────
+      - name: Generar binarios ms-auth
+        working-directory: Backend/ms-auth
+        run: ./mvnw -B clean verify -Dspring.profiles.active=test
+        env:
+          JWT_SECRET: test-secret-key-for-ci-pipeline-32chars
+
+      - name: Generar binarios ms-clientes
+        working-directory: Backend/ms-clientes
+        run: ./mvnw -B clean verify -Dspring.profiles.active=test
+        env:
+          JWT_SECRET: test-secret-key-for-ci-pipeline-32chars
+
+      - name: Generar binarios ms-pedidos
+        working-directory: Backend/ms-pedidos
+        run: ./mvnw -B clean verify -Dspring.profiles.active=test
+        env:
+          JWT_SECRET: test-secret-key-for-ci-pipeline-32chars
+
+      - name: Generar binarios ms-ruteo
+        working-directory: Backend/ms-ruteo
+        run: ./mvnw -B clean verify -Dspring.profiles.active=test
+        env:
+          JWT_SECRET: test-secret-key-for-ci-pipeline-32chars
+
+      # ── Analizar en SonarCloud ────────────────────────────────────────────
       - name: Analizar en SonarCloud
         uses: SonarSource/sonarqube-scan-action@v6
         env:
@@ -159,25 +287,28 @@ jobs:
       - name: Bajar containers
         if: always()
         run: |
-          docker compose -f Backend/ms-flota/docker-compose.yml down -v
-          docker compose -f Backend/ms-taller/docker-compose.yml down -v
+          docker compose -f Backend/ms-flota/docker-compose.yml down -v || true
+          docker compose -f Backend/ms-taller/docker-compose.yml down -v || true
 
+      # ── Notificaciones Telegram ───────────────────────────────────────────
       - name: Notificar éxito en Telegram
         if: success()
         run: |
-          curl -X POST https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage \
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             -H "Content-Type: application/json" \
-            -d '{
-              "chat_id": "${{ secrets.TELEGRAM_CHAT_ID }}",
-              "text": "✅ LogiFlow CI Exitoso\n\n📊 SonarCloud: https://sonarcloud.io/project/overview?id=jazambrano21_LogiFlow-Main\n🔗 Pipeline: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-            }'
+            -d "{
+              \"chat_id\": \"${{ secrets.TELEGRAM_CHAT_ID }}\",
+              \"text\": \"✅ LogiFlow CI Exitoso\\n\\nRama: ${{ github.ref_name }}\\nCommit: ${{ github.sha }}\\n\\n📊 SonarCloud: https://sonarcloud.io/project/overview?id=jazambrano21_LogiFlow-Proyecto-Integrador\\n🔗 Pipeline: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\",
+              \"parse_mode\": \"HTML\"
+            }"
 
       - name: Notificar fallo en Telegram
         if: failure()
         run: |
-          curl -X POST https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage \
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             -H "Content-Type: application/json" \
-            -d '{
-              "chat_id": "${{ secrets.TELEGRAM_CHAT_ID }}",
-              "text": "❌ LogiFlow CI Falló\n\n🔗 Pipeline: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-            }'
+            -d "{
+              \"chat_id\": \"${{ secrets.TELEGRAM_CHAT_ID }}\",
+              \"text\": \"❌ LogiFlow CI Falló\\n\\nRama: ${{ github.ref_name }}\\nCommit: ${{ github.sha }}\\n\\n🔗 Pipeline: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\",
+              \"parse_mode\": \"HTML\"
+            }"
